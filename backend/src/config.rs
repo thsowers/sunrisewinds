@@ -24,12 +24,18 @@ pub struct ThresholdsConfig {
     pub kp_min: f64,
 }
 
+fn default_swpc_alerts_interval() -> u64 {
+    60
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct PollingConfig {
     pub ovation_interval_secs: u64,
     pub kp_interval_secs: u64,
     pub kp_forecast_interval_secs: u64,
     pub solar_wind_interval_secs: u64,
+    #[serde(default = "default_swpc_alerts_interval")]
+    pub swpc_alerts_interval_secs: u64,
 }
 
 #[derive(Debug, Clone, Deserialize)]

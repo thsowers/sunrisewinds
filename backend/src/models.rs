@@ -52,6 +52,15 @@ pub struct ViewlinePoint {
     pub lat: f64,
 }
 
+// --- SWPC Alerts ---
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SwpcAlert {
+    pub product_id: String,
+    pub issue_datetime: String,
+    pub message: String,
+}
+
 // --- Alert ---
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -106,4 +115,45 @@ pub struct LocationInfo {
     pub name: String,
     pub latitude: f64,
     pub longitude: f64,
+}
+
+// --- WebSocket Messages ---
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "type", content = "data")]
+pub enum WsMessage {
+    FullState(FullStateData),
+    KpUpdate(Vec<KpIndex>),
+    KpForecastUpdate(Vec<KpForecast>),
+    SolarWindUpdate(Vec<SolarWind>),
+    ViewlineUpdate(Vec<ViewlinePoint>),
+    OvationUpdate(OvationResponse),
+    SwpcAlertsUpdate(Vec<SwpcAlert>),
+    NoaaScalesUpdate(serde_json::Value),
+    StatusUpdate(StatusUpdateData),
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct FullStateData {
+    pub viewline: Vec<ViewlinePoint>,
+    pub tonight_viewline: Option<TonightViewlineResponse>,
+    pub ovation: Option<OvationResponse>,
+    pub kp_current: Vec<KpIndex>,
+    pub kp_forecast: Vec<KpForecast>,
+    pub solar_wind: Vec<SolarWind>,
+    pub swpc_alerts: Vec<SwpcAlert>,
+    pub noaa_scales: Option<serde_json::Value>,
+    pub alert_active: bool,
+    pub last_ovation_poll: Option<DateTime<Utc>>,
+    pub last_kp_poll: Option<DateTime<Utc>>,
+    pub last_solar_wind_poll: Option<DateTime<Utc>>,
+    pub location_name: String,
+    pub location_lat: f64,
+    pub location_lon: f64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct StatusUpdateData {
+    pub alert_active: bool,
+    pub last_ovation_poll: Option<DateTime<Utc>>,
 }

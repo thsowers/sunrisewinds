@@ -1,6 +1,7 @@
 import axios from 'axios'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3000'
+export const WS_BASE = API_BASE.replace(/^http/, 'ws')
 
 const client = axios.create({
   baseURL: API_BASE,
@@ -69,6 +70,41 @@ export interface Alert {
   notified_via: string[]
 }
 
+export interface SwpcAlert {
+  product_id: string
+  issue_datetime: string
+  message: string
+}
+
+export interface FullStateData {
+  viewline: ViewlinePoint[]
+  tonight_viewline: TonightViewlineResponse | null
+  ovation: OvationData | null
+  kp_current: KpIndex[]
+  kp_forecast: KpForecast[]
+  solar_wind: SolarWind[]
+  swpc_alerts: SwpcAlert[]
+  noaa_scales: unknown | null
+  alert_active: boolean
+  last_ovation_poll: string | null
+  last_kp_poll: string | null
+  last_solar_wind_poll: string | null
+  location_name: string
+  location_lat: number
+  location_lon: number
+}
+
+export type WsMessage =
+  | { type: 'FullState'; data: FullStateData }
+  | { type: 'KpUpdate'; data: KpIndex[] }
+  | { type: 'KpForecastUpdate'; data: KpForecast[] }
+  | { type: 'SolarWindUpdate'; data: SolarWind[] }
+  | { type: 'ViewlineUpdate'; data: ViewlinePoint[] }
+  | { type: 'OvationUpdate'; data: OvationData }
+  | { type: 'SwpcAlertsUpdate'; data: SwpcAlert[] }
+  | { type: 'NoaaScalesUpdate'; data: unknown }
+  | { type: 'StatusUpdate'; data: { alert_active: boolean; last_ovation_poll: string | null } }
+
 export const api = {
   async getViewline(): Promise<ViewlinePoint[]> {
     const { data } = await client.get('/api/aurora/viewline')
@@ -121,6 +157,11 @@ export const api = {
 
   async getAlerts(): Promise<Alert[]> {
     const { data } = await client.get('/api/alerts')
+    return data
+  },
+
+  async getSwpcAlerts(): Promise<SwpcAlert[]> {
+    const { data } = await client.get('/api/aurora/swpc-alerts')
     return data
   },
 }

@@ -1,10 +1,11 @@
 use chrono::Utc;
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time;
 use tracing::{error, info, warn};
 
-use crate::models::{Alert, AlertType};
+use crate::models::{Alert, AlertType, StatusUpdateData, WsMessage};
 use crate::noaa::NoaaClient;
 use crate::state::AppState;
 use crate::viewline;
@@ -16,6 +17,8 @@ pub fn spawn_polling_tasks(state: Arc<AppState>) {
     spawn_kp_poll(Arc::clone(&state), Arc::clone(&noaa));
     spawn_kp_forecast_poll(Arc::clone(&state), Arc::clone(&noaa));
     spawn_solar_wind_poll(Arc::clone(&state), Arc::clone(&noaa));
+    spawn_swpc_alerts_poll(Arc::clone(&state), Arc::clone(&noaa));
+    spawn_noaa_scales_poll(Arc::clone(&state), Arc::clone(&noaa));
 }
 
 fn spawn_ovation_poll(state: Arc<AppState>, noaa: Arc<NoaaClient>) {
@@ -93,11 +96,23 @@ fn spawn_ovation_poll(state: Arc<AppState>, noaa: Arc<NoaaClient>) {
                             warn!("Failed to persist viewline snapshot: {}", e);
                         }
 
+                        state.broadcast_tx.send(WsMessage::ViewlineUpdate(vl.clone())).ok();
                         *state.cache.viewline.write().unwrap() = vl;
                     }
 
+                    let now = Utc::now();
+                    *state.cache.last_ovation_poll.write().unwrap() = Some(now);
+
+                    state.broadcast_tx.send(WsMessage::OvationUpdate(ovation.clone())).ok();
+                    state
+                        .broadcast_tx
+                        .send(WsMessage::StatusUpdate(StatusUpdateData {
+                            alert_active: *state.cache.alert_active.read().unwrap(),
+                            last_ovation_poll: Some(now),
+                        }))
+                        .ok();
+
                     *state.cache.ovation.write().unwrap() = Some(ovation);
-                    *state.cache.last_ovation_poll.write().unwrap() = Some(Utc::now());
                 }
                 Err(e) => error!("Failed to fetch OVATION data: {}", e),
             }
@@ -129,6 +144,7 @@ fn spawn_kp_poll(state: Arc<AppState>, noaa: Arc<NoaaClient>) {
                         }
                     }
 
+                    state.broadcast_tx.send(WsMessage::KpUpdate(kp_data.clone())).ok();
                     *state.cache.kp_current.write().unwrap() = kp_data;
                     *state.cache.last_kp_poll.write().unwrap() = Some(Utc::now());
                 }
@@ -151,6 +167,10 @@ fn spawn_kp_forecast_poll(state: Arc<AppState>, noaa: Arc<NoaaClient>) {
                 Ok(forecast) => {
                     let tonight = viewline::compute_tonight_viewline(&forecast, Utc::now());
                     *state.cache.tonight_viewline.write().unwrap() = tonight;
+                    state
+                        .broadcast_tx
+                        .send(WsMessage::KpForecastUpdate(forecast.clone()))
+                        .ok();
                     *state.cache.kp_forecast.write().unwrap() = forecast;
                 }
                 Err(e) => error!("Failed to fetch Kp forecast: {}", e),
@@ -177,10 +197,75 @@ fn spawn_solar_wind_poll(state: Arc<AppState>, noaa: Arc<NoaaClient>) {
                         }
                     }
 
+                    state
+                        .broadcast_tx
+                        .send(WsMessage::SolarWindUpdate(sw_data.clone()))
+                        .ok();
                     *state.cache.solar_wind.write().unwrap() = sw_data;
                     *state.cache.last_solar_wind_poll.write().unwrap() = Some(Utc::now());
                 }
                 Err(e) => error!("Failed to fetch solar wind: {}", e),
+            }
+        }
+    });
+}
+
+fn spawn_swpc_alerts_poll(state: Arc<AppState>, noaa: Arc<NoaaClient>) {
+    let interval_secs = state.config.polling.swpc_alerts_interval_secs;
+
+    tokio::spawn(async move {
+        let mut interval = time::interval(Duration::from_secs(interval_secs));
+        let mut seen_ids: HashSet<String> = HashSet::new();
+
+        loop {
+            interval.tick().await;
+
+            match noaa.fetch_swpc_alerts().await {
+                Ok(alerts) => {
+                    let new_count = alerts
+                        .iter()
+                        .filter(|a| !seen_ids.contains(&a.product_id))
+                        .count();
+
+                    for alert in &alerts {
+                        seen_ids.insert(alert.product_id.clone());
+                    }
+
+                    if new_count > 0 {
+                        info!(new_count = new_count, "New SWPC alerts received");
+                    }
+
+                    state
+                        .broadcast_tx
+                        .send(WsMessage::SwpcAlertsUpdate(alerts.clone()))
+                        .ok();
+                    *state.cache.swpc_alerts.write().unwrap() = alerts;
+                    *state.cache.last_swpc_alerts_poll.write().unwrap() = Some(Utc::now());
+                }
+                Err(e) => error!("Failed to fetch SWPC alerts: {}", e),
+            }
+        }
+    });
+}
+
+fn spawn_noaa_scales_poll(state: Arc<AppState>, noaa: Arc<NoaaClient>) {
+    let interval_secs = state.config.polling.swpc_alerts_interval_secs;
+
+    tokio::spawn(async move {
+        let mut interval = time::interval(Duration::from_secs(interval_secs));
+
+        loop {
+            interval.tick().await;
+
+            match noaa.fetch_noaa_scales().await {
+                Ok(scales) => {
+                    state
+                        .broadcast_tx
+                        .send(WsMessage::NoaaScalesUpdate(scales.clone()))
+                        .ok();
+                    *state.cache.noaa_scales.write().unwrap() = Some(scales);
+                }
+                Err(e) => error!("Failed to fetch NOAA scales: {}", e),
             }
         }
     });

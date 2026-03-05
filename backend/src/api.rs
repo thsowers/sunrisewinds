@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use crate::models::{LocationInfo, StatusResponse};
 use crate::state::AppState;
+use crate::ws::ws_handler;
 
 #[derive(Deserialize)]
 pub struct HistoryQuery {
@@ -16,6 +17,7 @@ pub struct HistoryQuery {
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
+        .route("/api/ws", get(ws_handler))
         .route("/api/aurora/viewline", get(get_viewline))
         .route("/api/aurora/viewline/tonight", get(get_tonight_viewline))
         .route("/api/aurora/ovation", get(get_ovation))
@@ -24,6 +26,8 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/api/aurora/kp/history", get(get_kp_history))
         .route("/api/aurora/solar-wind", get(get_solar_wind))
         .route("/api/aurora/solar-wind/history", get(get_solar_wind_history))
+        .route("/api/aurora/swpc-alerts", get(get_swpc_alerts))
+        .route("/api/aurora/noaa-scales", get(get_noaa_scales))
         .route("/api/status", get(get_status))
         .route("/api/config", get(get_config))
         .route("/api/alerts", get(get_alerts))
@@ -96,6 +100,23 @@ async fn get_solar_wind_history(
     match state.db.get_solar_wind_history(hours) {
         Ok(data) => Ok(Json(serde_json::to_value(data).unwrap())),
         Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    }
+}
+
+async fn get_swpc_alerts(
+    State(state): State<Arc<AppState>>,
+) -> Json<serde_json::Value> {
+    let alerts = state.cache.swpc_alerts.read().unwrap().clone();
+    Json(serde_json::to_value(alerts).unwrap())
+}
+
+async fn get_noaa_scales(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let scales = state.cache.noaa_scales.read().unwrap().clone();
+    match scales {
+        Some(data) => Ok(Json(data)),
+        None => Err(StatusCode::SERVICE_UNAVAILABLE),
     }
 }
 

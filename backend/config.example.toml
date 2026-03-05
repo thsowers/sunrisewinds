@@ -12,6 +12,7 @@ ovation_interval_secs = 300
 kp_interval_secs = 60
 kp_forecast_interval_secs = 900
 solar_wind_interval_secs = 300
+swpc_alerts_interval_secs = 60
 
 [notifications]
 webhook_url = ""

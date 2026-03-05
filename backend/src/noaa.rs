@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use reqwest::Client;
 use tracing::{debug, warn};
 
-use crate::models::{KpForecast, KpIndex, OvationResponse, SolarWind};
+use crate::models::{KpForecast, KpIndex, OvationResponse, SolarWind, SwpcAlert};
 
 const OVATION_URL: &str = "https://services.swpc.noaa.gov/json/ovation_aurora_latest.json";
 const KP_INDEX_URL: &str = "https://services.swpc.noaa.gov/json/planetary_k_index_1m.json";
@@ -10,6 +10,8 @@ const KP_FORECAST_URL: &str =
     "https://services.swpc.noaa.gov/products/noaa-planetary-k-index-forecast.json";
 const SOLAR_WIND_URL: &str =
     "https://services.swpc.noaa.gov/products/geospace/propagated-solar-wind-1-hour.json";
+const SWPC_ALERTS_URL: &str = "https://services.swpc.noaa.gov/products/alerts.json";
+const NOAA_SCALES_URL: &str = "https://services.swpc.noaa.gov/products/noaa-scales.json";
 
 pub struct NoaaClient {
     client: Client,
@@ -133,6 +135,35 @@ impl NoaaClient {
             .collect();
 
         debug!(count = data.len(), "Solar wind data fetched");
+        Ok(data)
+    }
+
+    pub async fn fetch_swpc_alerts(&self) -> Result<Vec<SwpcAlert>> {
+        debug!("Fetching SWPC alerts");
+        let resp = self
+            .client
+            .get(SWPC_ALERTS_URL)
+            .send()
+            .await
+            .context("Failed to fetch SWPC alerts")?;
+
+        let data: Vec<SwpcAlert> = resp.json().await.context("Failed to parse SWPC alerts")?;
+        debug!(count = data.len(), "SWPC alerts fetched");
+        Ok(data)
+    }
+
+    pub async fn fetch_noaa_scales(&self) -> Result<serde_json::Value> {
+        debug!("Fetching NOAA scales");
+        let resp = self
+            .client
+            .get(NOAA_SCALES_URL)
+            .send()
+            .await
+            .context("Failed to fetch NOAA scales")?;
+
+        let data: serde_json::Value =
+            resp.json().await.context("Failed to parse NOAA scales")?;
+        debug!("NOAA scales fetched");
         Ok(data)
     }
 }

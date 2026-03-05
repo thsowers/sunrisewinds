@@ -1,15 +1,21 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import {
-  api,
-  type ViewlinePoint,
-  type OvationData,
-  type KpIndex,
+  WS_BASE,
+  type FullStateData,
   type KpForecast,
-  type SolarWind,
+  type KpIndex,
+  type OvationData,
   type StatusResponse,
+  type SwpcAlert,
   type TonightViewlineResponse,
+  type ViewlinePoint,
+  type WsMessage,
+  type SolarWind,
 } from '@/api/client'
+
+const RECONNECT_DELAY_MIN_MS = 1000
+const RECONNECT_DELAY_MAX_MS = 30000
 
 export const useAuroraStore = defineStore('aurora', () => {
   const viewline = ref<ViewlinePoint[]>([])
@@ -18,114 +24,119 @@ export const useAuroraStore = defineStore('aurora', () => {
   const kpCurrent = ref<KpIndex[]>([])
   const kpForecast = ref<KpForecast[]>([])
   const solarWind = ref<SolarWind[]>([])
+  const swpcAlerts = ref<SwpcAlert[]>([])
+  const noaaScales = ref<unknown | null>(null)
   const status = ref<StatusResponse | null>(null)
   const loading = ref(false)
   const error = ref<string | null>(null)
 
-  let viewlineInterval: ReturnType<typeof setInterval> | null = null
-  let kpInterval: ReturnType<typeof setInterval> | null = null
-  let solarWindInterval: ReturnType<typeof setInterval> | null = null
+  let ws: WebSocket | null = null
+  let reconnectTimeout: ReturnType<typeof setTimeout> | null = null
+  let reconnectDelay = RECONNECT_DELAY_MIN_MS
 
-  const VIEWLINE_POLL_MS = 5 * 60 * 1000
-  const KP_POLL_MS = 60 * 1000
-  const SOLAR_WIND_POLL_MS = 5 * 60 * 1000
-
-  async function fetchViewline() {
-    try {
-      viewline.value = await api.getViewline()
-    } catch (e) {
-      console.error('Failed to fetch viewline:', e)
+  function handleWsMessage(msg: WsMessage) {
+    switch (msg.type) {
+      case 'FullState': {
+        const d: FullStateData = msg.data
+        viewline.value = d.viewline
+        tonightViewline.value = d.tonight_viewline
+        ovation.value = d.ovation
+        kpCurrent.value = d.kp_current
+        kpForecast.value = d.kp_forecast
+        solarWind.value = d.solar_wind
+        swpcAlerts.value = d.swpc_alerts
+        noaaScales.value = d.noaa_scales
+        status.value = {
+          healthy: true,
+          last_ovation_poll: d.last_ovation_poll,
+          last_kp_poll: d.last_kp_poll,
+          last_solar_wind_poll: d.last_solar_wind_poll,
+          alert_active: d.alert_active,
+          location: {
+            name: d.location_name,
+            latitude: d.location_lat,
+            longitude: d.location_lon,
+          },
+        }
+        loading.value = false
+        break
+      }
+      case 'KpUpdate':
+        kpCurrent.value = msg.data
+        break
+      case 'KpForecastUpdate':
+        kpForecast.value = msg.data
+        break
+      case 'SolarWindUpdate':
+        solarWind.value = msg.data
+        break
+      case 'ViewlineUpdate':
+        viewline.value = msg.data
+        break
+      case 'OvationUpdate':
+        ovation.value = msg.data
+        break
+      case 'SwpcAlertsUpdate':
+        swpcAlerts.value = msg.data
+        break
+      case 'NoaaScalesUpdate':
+        noaaScales.value = msg.data
+        break
+      case 'StatusUpdate':
+        if (status.value) {
+          status.value.alert_active = msg.data.alert_active
+          status.value.last_ovation_poll = msg.data.last_ovation_poll
+        }
+        break
     }
   }
 
-  async function fetchTonightViewline() {
-    tonightViewline.value = await api.getTonightViewline()
+  function scheduleReconnect() {
+    reconnectTimeout = setTimeout(() => {
+      reconnectDelay = Math.min(reconnectDelay * 2, RECONNECT_DELAY_MAX_MS)
+      connectWebSocket()
+    }, reconnectDelay)
   }
 
-  async function fetchOvation() {
-    try {
-      ovation.value = await api.getOvation()
-    } catch (e) {
-      console.error('Failed to fetch ovation:', e)
-    }
-  }
+  function connectWebSocket() {
+    if (ws && ws.readyState === WebSocket.OPEN) return
 
-  async function fetchKp() {
-    try {
-      kpCurrent.value = await api.getKp()
-    } catch (e) {
-      console.error('Failed to fetch Kp:', e)
-    }
-  }
-
-  async function fetchKpForecast() {
-    try {
-      kpForecast.value = await api.getKpForecast()
-    } catch (e) {
-      console.error('Failed to fetch Kp forecast:', e)
-    }
-  }
-
-  async function fetchSolarWind() {
-    try {
-      solarWind.value = await api.getSolarWind()
-    } catch (e) {
-      console.error('Failed to fetch solar wind:', e)
-    }
-  }
-
-  async function fetchStatus() {
-    try {
-      status.value = await api.getStatus()
-    } catch (e) {
-      console.error('Failed to fetch status:', e)
-    }
-  }
-
-  async function fetchAll() {
     loading.value = true
     error.value = null
-    try {
-      await Promise.all([
-        fetchViewline(),
-        fetchTonightViewline(),
-        fetchOvation(),
-        fetchKp(),
-        fetchKpForecast(),
-        fetchSolarWind(),
-        fetchStatus(),
-      ])
-    } catch (e) {
-      error.value = 'Failed to fetch data'
-    } finally {
-      loading.value = false
+
+    const wsUrl = `${WS_BASE}/api/ws`
+    ws = new WebSocket(wsUrl)
+
+    ws.onopen = () => {
+      reconnectDelay = RECONNECT_DELAY_MIN_MS
+    }
+
+    ws.onmessage = (event: MessageEvent<string>) => {
+      try {
+        const msg = JSON.parse(event.data) as WsMessage
+        handleWsMessage(msg)
+      } catch (e) {
+        console.error('Failed to parse WebSocket message:', e)
+      }
+    }
+
+    ws.onclose = () => {
+      scheduleReconnect()
+    }
+
+    ws.onerror = () => {
+      error.value = 'WebSocket connection error'
+      ws?.close()
     }
   }
 
-  function startPolling() {
-    fetchAll()
-
-    viewlineInterval = setInterval(() => {
-      fetchViewline()
-      fetchTonightViewline()
-      fetchOvation()
-      fetchStatus()
-    }, VIEWLINE_POLL_MS)
-
-    kpInterval = setInterval(() => {
-      fetchKp()
-      fetchKpForecast()
-    }, KP_POLL_MS)
-
-    solarWindInterval = setInterval(() => {
-      fetchSolarWind()
-    }, SOLAR_WIND_POLL_MS)
-  }
-
-  function stopPolling() {
-    if (viewlineInterval) clearInterval(viewlineInterval)
-    if (kpInterval) clearInterval(kpInterval)
-    if (solarWindInterval) clearInterval(solarWindInterval)
+  function disconnectWebSocket() {
+    if (reconnectTimeout) {
+      clearTimeout(reconnectTimeout)
+      reconnectTimeout = null
+    }
+    ws?.close()
+    ws = null
   }
 
   return {
@@ -135,11 +146,12 @@ export const useAuroraStore = defineStore('aurora', () => {
     kpCurrent,
     kpForecast,
     solarWind,
+    swpcAlerts,
+    noaaScales,
     status,
     loading,
     error,
-    fetchAll,
-    startPolling,
-    stopPolling,
+    connectWebSocket,
+    disconnectWebSocket,
   }
 })

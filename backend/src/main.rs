@@ -7,6 +7,7 @@ mod notifications;
 mod polling;
 mod state;
 mod viewline;
+mod ws;
 
 use std::net::SocketAddr;
 use std::path::PathBuf;

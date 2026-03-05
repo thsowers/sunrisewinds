@@ -5,15 +5,16 @@ import AuroraMap from '@/components/AuroraMap.vue'
 import KpPanel from '@/components/KpPanel.vue'
 import SolarWindPanel from '@/components/SolarWindPanel.vue'
 import StatusBar from '@/components/StatusBar.vue'
+import SwpcAlertsPanel from '@/components/SwpcAlertsPanel.vue'
 
 const store = useAuroraStore()
 
 onMounted(() => {
-  store.startPolling()
+  store.connectWebSocket()
 })
 
 onUnmounted(() => {
-  store.stopPolling()
+  store.disconnectWebSocket()
 })
 </script>
 
@@ -35,6 +36,9 @@ onUnmounted(() => {
         </div>
         <div class="panel">
           <SolarWindPanel />
+        </div>
+        <div class="panel alerts-panel">
+          <SwpcAlertsPanel />
         </div>
       </div>
     </div>
@@ -96,6 +100,12 @@ onUnmounted(() => {
 
 .panel {
   background: #0d0d1a;
+}
+
+.alerts-panel {
+  flex: 1;
+  min-height: 200px;
+  overflow: hidden;
 }
 
 @media (max-width: 900px) {
