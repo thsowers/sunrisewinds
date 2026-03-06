@@ -1,21 +1,21 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted } from 'vue'
-import { useAuroraStore } from '@/stores/aurora'
-import AuroraMap from '@/components/AuroraMap.vue'
-import KpPanel from '@/components/KpPanel.vue'
-import SolarWindPanel from '@/components/SolarWindPanel.vue'
-import StatusBar from '@/components/StatusBar.vue'
-import SwpcAlertsPanel from '@/components/SwpcAlertsPanel.vue'
+import { onMounted, onUnmounted } from "vue";
+import { useAuroraStore } from "@/stores/aurora";
+import AuroraMap from "@/components/AuroraMap.vue";
+import KpPanel from "@/components/KpPanel.vue";
+import SolarWindPanel from "@/components/SolarWindPanel.vue";
+import StatusBar from "@/components/StatusBar.vue";
+import SwpcAlertsPanel from "@/components/SwpcAlertsPanel.vue";
 
-const store = useAuroraStore()
+const store = useAuroraStore();
 
 onMounted(() => {
-  store.connectWebSocket()
-})
+  store.connectWebSocket();
+});
 
 onUnmounted(() => {
-  store.disconnectWebSocket()
-})
+  store.disconnectWebSocket();
+});
 </script>
 
 <template>

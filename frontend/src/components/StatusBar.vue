@@ -1,21 +1,21 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useAuroraStore } from '@/stores/aurora'
+import { computed } from "vue";
+import { useAuroraStore } from "@/stores/aurora";
 
-const store = useAuroraStore()
+const store = useAuroraStore();
 
 const connectionStatus = computed(() => {
-  if (store.loading) return 'loading'
-  if (store.error) return 'error'
-  if (store.status) return 'connected'
-  return 'disconnected'
-})
+  if (store.loading) return "loading";
+  if (store.error) return "error";
+  if (store.status) return "connected";
+  return "disconnected";
+});
 
-const alertStatus = computed(() => store.status?.alert_active ?? false)
+const alertStatus = computed(() => store.status?.alert_active ?? false);
 
 function formatTime(iso: string | null): string {
-  if (!iso) return 'never'
-  return new Date(iso).toLocaleTimeString()
+  if (!iso) return "never";
+  return new Date(iso).toLocaleTimeString();
 }
 </script>
 
@@ -44,7 +44,9 @@ function formatTime(iso: string | null): string {
       {{ formatTime(store.status.last_ovation_poll) }}
     </div>
 
-    <div v-if="alertStatus" class="status-item alert-active">AURORA ALERT ACTIVE</div>
+    <div v-if="alertStatus" class="status-item alert-active">
+      AURORA ALERT ACTIVE
+    </div>
   </div>
 </template>
 

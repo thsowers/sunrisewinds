@@ -1,167 +1,174 @@
-import axios from 'axios'
+import axios from "axios";
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3000'
-export const WS_BASE = API_BASE.replace(/^http/, 'ws')
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:3000";
+export const WS_BASE = API_BASE.replace(/^http/, "ws");
 
 const client = axios.create({
   baseURL: API_BASE,
   timeout: 10000,
-})
+});
 
 export interface ViewlinePoint {
-  lon: number
-  lat: number
+  lon: number;
+  lat: number;
 }
 
 export interface OvationData {
-  'Observation Time': string
-  'Forecast Time': string
-  coordinates: [number, number, number][] // [lon, lat, probability]
+  "Observation Time": string;
+  "Forecast Time": string;
+  coordinates: [number, number, number][]; // [lon, lat, probability]
 }
 
 export interface KpIndex {
-  time_tag: string
-  kp_index: number
-  estimated_kp: number | null
-  kp: string | null
+  time_tag: string;
+  kp_index: number;
+  estimated_kp: number | null;
+  kp: string | null;
 }
 
 export interface KpForecast {
-  time_tag: string
-  kp: number
-  observed: string
-  noaa_scale: string
+  time_tag: string;
+  kp: number;
+  observed: string;
+  noaa_scale: string;
 }
 
 export interface SolarWind {
-  time_tag: string
-  speed: number
-  density: number
-  bz: number
-  bt: number
+  time_tag: string;
+  speed: number;
+  density: number;
+  bz: number;
+  bt: number;
 }
 
 export interface StatusResponse {
-  healthy: boolean
-  last_ovation_poll: string | null
-  last_kp_poll: string | null
-  last_solar_wind_poll: string | null
-  alert_active: boolean
+  healthy: boolean;
+  last_ovation_poll: string | null;
+  last_kp_poll: string | null;
+  last_solar_wind_poll: string | null;
+  alert_active: boolean;
   location: {
-    name: string
-    latitude: number
-    longitude: number
-  }
+    name: string;
+    latitude: number;
+    longitude: number;
+  };
 }
 
 export interface TonightViewlineResponse {
-  viewline: ViewlinePoint[]
-  max_kp: number
-  window_start: string
-  window_end: string
+  viewline: ViewlinePoint[];
+  max_kp: number;
+  window_start: string;
+  window_end: string;
 }
 
 export interface Alert {
-  timestamp: string
-  alert_type: string
-  viewline_lat: number
-  user_lat: number
-  kp: number
-  notified_via: string[]
+  timestamp: string;
+  alert_type: string;
+  viewline_lat: number;
+  user_lat: number;
+  kp: number;
+  notified_via: string[];
 }
 
 export interface SwpcAlert {
-  product_id: string
-  issue_datetime: string
-  message: string
+  product_id: string;
+  issue_datetime: string;
+  message: string;
 }
 
 export interface FullStateData {
-  viewline: ViewlinePoint[]
-  tonight_viewline: TonightViewlineResponse | null
-  ovation: OvationData | null
-  kp_current: KpIndex[]
-  kp_forecast: KpForecast[]
-  solar_wind: SolarWind[]
-  swpc_alerts: SwpcAlert[]
-  noaa_scales: unknown | null
-  alert_active: boolean
-  last_ovation_poll: string | null
-  last_kp_poll: string | null
-  last_solar_wind_poll: string | null
-  location_name: string
-  location_lat: number
-  location_lon: number
+  viewline: ViewlinePoint[];
+  tonight_viewline: TonightViewlineResponse | null;
+  ovation: OvationData | null;
+  kp_current: KpIndex[];
+  kp_forecast: KpForecast[];
+  solar_wind: SolarWind[];
+  swpc_alerts: SwpcAlert[];
+  noaa_scales: unknown | null;
+  alert_active: boolean;
+  last_ovation_poll: string | null;
+  last_kp_poll: string | null;
+  last_solar_wind_poll: string | null;
+  location_name: string;
+  location_lat: number;
+  location_lon: number;
 }
 
 export type WsMessage =
-  | { type: 'FullState'; data: FullStateData }
-  | { type: 'KpUpdate'; data: KpIndex[] }
-  | { type: 'KpForecastUpdate'; data: KpForecast[] }
-  | { type: 'SolarWindUpdate'; data: SolarWind[] }
-  | { type: 'ViewlineUpdate'; data: ViewlinePoint[] }
-  | { type: 'OvationUpdate'; data: OvationData }
-  | { type: 'SwpcAlertsUpdate'; data: SwpcAlert[] }
-  | { type: 'NoaaScalesUpdate'; data: unknown }
-  | { type: 'StatusUpdate'; data: { alert_active: boolean; last_ovation_poll: string | null } }
+  | { type: "FullState"; data: FullStateData }
+  | { type: "KpUpdate"; data: KpIndex[] }
+  | { type: "KpForecastUpdate"; data: KpForecast[] }
+  | { type: "SolarWindUpdate"; data: SolarWind[] }
+  | { type: "ViewlineUpdate"; data: ViewlinePoint[] }
+  | { type: "OvationUpdate"; data: OvationData }
+  | { type: "SwpcAlertsUpdate"; data: SwpcAlert[] }
+  | { type: "NoaaScalesUpdate"; data: unknown }
+  | {
+      type: "StatusUpdate";
+      data: { alert_active: boolean; last_ovation_poll: string | null };
+    };
 
 export const api = {
   async getViewline(): Promise<ViewlinePoint[]> {
-    const { data } = await client.get('/api/aurora/viewline')
-    return data
+    const { data } = await client.get("/api/aurora/viewline");
+    return data;
   },
 
   async getOvation(): Promise<OvationData> {
-    const { data } = await client.get('/api/aurora/ovation')
-    return data
+    const { data } = await client.get("/api/aurora/ovation");
+    return data;
   },
 
   async getKp(): Promise<KpIndex[]> {
-    const { data } = await client.get('/api/aurora/kp')
-    return data
+    const { data } = await client.get("/api/aurora/kp");
+    return data;
   },
 
   async getKpForecast(): Promise<KpForecast[]> {
-    const { data } = await client.get('/api/aurora/kp/forecast')
-    return data
+    const { data } = await client.get("/api/aurora/kp/forecast");
+    return data;
   },
 
   async getKpHistory(hours: number = 24): Promise<KpIndex[]> {
-    const { data } = await client.get('/api/aurora/kp/history', { params: { hours } })
-    return data
+    const { data } = await client.get("/api/aurora/kp/history", {
+      params: { hours },
+    });
+    return data;
   },
 
   async getSolarWind(): Promise<SolarWind[]> {
-    const { data } = await client.get('/api/aurora/solar-wind')
-    return data
+    const { data } = await client.get("/api/aurora/solar-wind");
+    return data;
   },
 
   async getSolarWindHistory(hours: number = 24): Promise<SolarWind[]> {
-    const { data } = await client.get('/api/aurora/solar-wind/history', { params: { hours } })
-    return data
+    const { data } = await client.get("/api/aurora/solar-wind/history", {
+      params: { hours },
+    });
+    return data;
   },
 
   async getStatus(): Promise<StatusResponse> {
-    const { data } = await client.get('/api/status')
-    return data
+    const { data } = await client.get("/api/status");
+    return data;
   },
 
   async getTonightViewline(): Promise<TonightViewlineResponse | null> {
     try {
-      const { data } = await client.get('/api/aurora/viewline/tonight')
-      return data
+      const { data } = await client.get("/api/aurora/viewline/tonight");
+      return data;
     } catch {
-      return null
+      return null;
     }
   },
 
   async getAlerts(): Promise<Alert[]> {
-    const { data } = await client.get('/api/alerts')
-    return data
+    const { data } = await client.get("/api/alerts");
+    return data;
   },
 
   async getSwpcAlerts(): Promise<SwpcAlert[]> {
-    const { data } = await client.get('/api/aurora/swpc-alerts')
-    return data
+    const { data } = await client.get("/api/aurora/swpc-alerts");
+    return data;
   },
-}
+};

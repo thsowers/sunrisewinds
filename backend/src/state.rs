@@ -59,8 +59,7 @@ impl Cache {
 impl AppState {
     pub fn new(config: AppConfig) -> anyhow::Result<Arc<Self>> {
         let db = Database::new(&config.database.path)?;
-        let notifications =
-            NotificationManager::new(&config.notifications, &config.email);
+        let notifications = NotificationManager::new(&config.notifications, &config.email);
         let (broadcast_tx, _) = broadcast::channel(128);
 
         Ok(Arc::new(Self {

@@ -185,9 +185,7 @@ pub fn compute_viewline(kp: f64) -> Vec<ViewlinePoint> {
     for az_deg in 0..360 {
         let az = to_rad(az_deg as f64);
 
-        let lat = (pole_lat.sin() * dist.cos()
-            + pole_lat.cos() * dist.sin() * az.cos())
-        .asin();
+        let lat = (pole_lat.sin() * dist.cos() + pole_lat.cos() * dist.sin() * az.cos()).asin();
 
         let lon = pole_lon
             + (az.sin() * dist.sin() * pole_lat.cos())
@@ -206,8 +204,6 @@ pub fn compute_viewline(kp: f64) -> Vec<ViewlinePoint> {
         } else if lon_diff < -180.0 {
             lon_diff += 360.0;
         }
-        // Distance east of the taper boundary (negative = west of it = full offset)
-        let east_of_taper = lon_diff - KP_VIEWING_TAPER_DEG;
         // Smooth cosine taper: 1.0 at pole, tapering east; also taper from
         // the far side so points near 180° from the pole smoothly reach 0.
         let factor = if lon_diff <= 0.0 {
@@ -225,7 +221,7 @@ pub fn compute_viewline(kp: f64) -> Vec<ViewlinePoint> {
         let viewline_lat = lat_deg - KP_VIEWING_OFFSET_MAX_DEG * factor;
 
         // Clip to North America region (viewing offset is only calibrated here)
-        if viewline_lat > 0.0 && lon_deg >= -130.0 && lon_deg <= -40.0 {
+        if viewline_lat > 0.0 && (-130.0..=-40.0).contains(&lon_deg) {
             points.push(ViewlinePoint {
                 lon: lon_deg,
                 lat: viewline_lat,
@@ -299,22 +295,18 @@ fn tonight_window(now: DateTime<Utc>) -> (DateTime<Utc>, DateTime<Utc>) {
 }
 
 /// Checks whether aurora is potentially visible at the given location.
-pub fn is_aurora_visible(
-    viewline: &[ViewlinePoint],
-    user_lat: f64,
-    user_lon: f64,
-) -> Option<f64> {
+pub fn is_aurora_visible(viewline: &[ViewlinePoint], user_lat: f64, user_lon: f64) -> Option<f64> {
     if viewline.is_empty() {
         return None;
     }
 
-    let closest = viewline
-        .iter()
-        .min_by(|a, b| {
-            let diff_a = (a.lon - user_lon).abs();
-            let diff_b = (b.lon - user_lon).abs();
-            diff_a.partial_cmp(&diff_b).unwrap_or(std::cmp::Ordering::Equal)
-        })?;
+    let closest = viewline.iter().min_by(|a, b| {
+        let diff_a = (a.lon - user_lon).abs();
+        let diff_b = (b.lon - user_lon).abs();
+        diff_a
+            .partial_cmp(&diff_b)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    })?;
 
     if closest.lat <= user_lat {
         Some(closest.lat)
@@ -325,19 +317,20 @@ pub fn is_aurora_visible(
 
 /// Returns the viewline latitude at a specific longitude for the given Kp.
 /// Wraps the existing spherical geometry from `compute_viewline`.
+#[cfg(test)]
 pub fn viewline_lat_at_lon(kp: f64, target_lon: f64) -> Option<f64> {
     let viewline = compute_viewline(kp);
     if viewline.is_empty() {
         return None;
     }
 
-    let closest = viewline
-        .iter()
-        .min_by(|a, b| {
-            let diff_a = (a.lon - target_lon).abs();
-            let diff_b = (b.lon - target_lon).abs();
-            diff_a.partial_cmp(&diff_b).unwrap_or(std::cmp::Ordering::Equal)
-        })?;
+    let closest = viewline.iter().min_by(|a, b| {
+        let diff_a = (a.lon - target_lon).abs();
+        let diff_b = (b.lon - target_lon).abs();
+        diff_a
+            .partial_cmp(&diff_b)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    })?;
 
     Some(closest.lat)
 }
@@ -530,9 +523,7 @@ mod tests {
             observation_time: String::new(),
             forecast_time: String::new(),
             coordinates: (0..360)
-                .flat_map(|lon| {
-                    (0..90).map(move |lat| [lon as f64, lat as f64, 0.0])
-                })
+                .flat_map(|lon| (0..90).map(move |lat| [lon as f64, lat as f64, 0.0]))
                 .collect(),
         };
 
@@ -605,9 +596,18 @@ mod tests {
     #[test]
     fn test_is_aurora_visible() {
         let viewline = vec![
-            ViewlinePoint { lon: -94.0, lat: 48.0 },
-            ViewlinePoint { lon: -93.0, lat: 46.0 },
-            ViewlinePoint { lon: -92.0, lat: 47.0 },
+            ViewlinePoint {
+                lon: -94.0,
+                lat: 48.0,
+            },
+            ViewlinePoint {
+                lon: -93.0,
+                lat: 46.0,
+            },
+            ViewlinePoint {
+                lon: -92.0,
+                lat: 47.0,
+            },
         ];
         assert!(is_aurora_visible(&viewline, 45.0, -93.0).is_none());
         assert!(is_aurora_visible(&viewline, 47.0, -93.0).is_some());
@@ -721,6 +721,174 @@ mod tests {
             "Kp=4 at lon -80: expected 43-47N, got {:.1}N",
             lat
         );
+    }
+
+    /// NOAA reference ranges for each integer Kp at key North American longitudes.
+    /// Derived from NOAA's published aurora Kp map and viewline forecasts.
+    /// Format: (kp, lon, min_lat, max_lat, label)
+    const NOAA_REFERENCE: &[(u32, f64, f64, f64, &str)] = &[
+        // Kp 1
+        (1, -124.0, 51.0, 55.0, "Kp1 west coast"),
+        (1, -80.0, 49.0, 53.0, "Kp1 Great Lakes"),
+        (1, -63.0, 50.0, 54.0, "Kp1 PEI"),
+        // Kp 3
+        (3, -124.0, 48.0, 52.0, "Kp3 west coast"),
+        (3, -80.0, 45.0, 49.0, "Kp3 Great Lakes"),
+        (3, -63.0, 47.0, 51.0, "Kp3 PEI"),
+        // Kp 5
+        (5, -124.0, 44.0, 48.0, "Kp5 west coast"),
+        (5, -80.0, 41.0, 45.0, "Kp5 Great Lakes"),
+        (5, -63.0, 43.0, 47.0, "Kp5 PEI"),
+        // Kp 7
+        (7, -124.0, 40.0, 44.0, "Kp7 west coast"),
+        (7, -80.0, 37.0, 41.0, "Kp7 Great Lakes"),
+        (7, -63.0, 39.0, 43.0, "Kp7 PEI"),
+    ];
+
+    #[test]
+    fn test_noaa_reference_ranges() {
+        for &(kp, lon, min_lat, max_lat, label) in NOAA_REFERENCE {
+            let viewline = compute_viewline(kp as f64);
+            let closest = viewline
+                .iter()
+                .min_by(|a, b| {
+                    (a.lon - lon)
+                        .abs()
+                        .partial_cmp(&(b.lon - lon).abs())
+                        .unwrap()
+                })
+                .expect("Viewline should have points");
+
+            assert!(
+                closest.lat >= min_lat && closest.lat <= max_lat,
+                "{}: expected {:.0}-{:.0}N, got {:.1}N",
+                label,
+                min_lat,
+                max_lat,
+                closest.lat,
+            );
+        }
+    }
+
+    /// Live test: fetches NOAA's Kp forecast, determines tonight's max Kp
+    /// (the same value NOAA uses for their viewline image), computes our
+    /// viewline, and verifies it falls within expected NOAA reference ranges.
+    ///
+    /// Run with: cargo test -p sunrisewinds test_live_noaa_comparison -- --ignored --nocapture
+    #[tokio::test]
+    async fn test_live_noaa_comparison() {
+        use chrono::Utc;
+
+        let client = reqwest::Client::new();
+
+        // Fetch NOAA Kp forecast
+        let resp = client
+            .get("https://services.swpc.noaa.gov/products/noaa-planetary-k-index-forecast.json")
+            .send()
+            .await
+            .expect("Failed to fetch NOAA Kp forecast");
+
+        let forecasts: Vec<Vec<serde_json::Value>> =
+            resp.json().await.expect("Failed to parse NOAA Kp forecast");
+
+        // Determine tonight's window (same logic as compute_tonight_viewline)
+        let now = Utc::now();
+        let (window_start, window_end) = tonight_window(now);
+
+        println!("Tonight window: {} to {}", window_start, window_end);
+
+        // Find max Kp in tonight's window
+        let mut max_kp: f64 = 0.0;
+        for row in &forecasts[1..] {
+            // Skip header row
+            if let (Some(time_str), Some(kp_val)) = (row[0].as_str(), row[1].as_str()) {
+                if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(time_str, "%Y-%m-%d %H:%M:%S")
+                {
+                    let dt = chrono::TimeZone::from_utc_datetime(&Utc, &dt);
+                    if dt >= window_start && dt < window_end {
+                        if let Ok(kp) = kp_val.parse::<f64>() {
+                            if kp > max_kp {
+                                max_kp = kp;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        println!("Tonight max Kp (raw): {:.2}", max_kp);
+        assert!(max_kp > 0.0, "No Kp forecast found for tonight's window");
+
+        // NOAA uses integer Kp for their viewline image
+        let noaa_kp = max_kp.round() as u32;
+        println!("NOAA integer Kp: {}", noaa_kp);
+
+        // Compute our viewline at the raw Kp (matching our app behavior)
+        let viewline = compute_viewline(max_kp);
+        assert!(!viewline.is_empty(), "Viewline should not be empty");
+
+        // Check against NOAA reference ranges for the nearest integer Kp
+        let refs: Vec<_> = NOAA_REFERENCE.iter().filter(|r| r.0 == noaa_kp).collect();
+
+        if refs.is_empty() {
+            println!(
+                "No reference data for Kp={}, skipping range checks (Kp may be 0, 2, 6, 8, or 9)",
+                noaa_kp
+            );
+        }
+
+        // Allow slightly wider range since we use raw Kp (not rounded)
+        let margin = 1.5; // extra degrees of tolerance for raw vs integer Kp
+        for &&(_, lon, min_lat, max_lat, label) in &refs {
+            let closest = viewline
+                .iter()
+                .min_by(|a, b| {
+                    (a.lon - lon)
+                        .abs()
+                        .partial_cmp(&(b.lon - lon).abs())
+                        .unwrap()
+                })
+                .unwrap();
+
+            let ok = closest.lat >= (min_lat - margin) && closest.lat <= (max_lat + margin);
+            let status = if ok { "PASS" } else { "FAIL" };
+            println!(
+                "  [{}] {} at lon {:.0}: {:.1}N (NOAA range: {:.0}-{:.0}N, with margin: {:.0}-{:.0}N)",
+                status,
+                label,
+                lon,
+                closest.lat,
+                min_lat,
+                max_lat,
+                min_lat - margin,
+                max_lat + margin,
+            );
+            assert!(
+                ok,
+                "{}: {:.1}N outside NOAA range {:.0}-{:.0}N (±{:.1}° margin)",
+                label, closest.lat, min_lat, max_lat, margin,
+            );
+        }
+
+        // Print full viewline summary for visual comparison
+        println!("\nViewline summary (Kp={:.2}):", max_kp);
+        let targets = [
+            (-124.0, "West coast"),
+            (-93.0, "Minneapolis"),
+            (-80.0, "Great Lakes"),
+            (-68.0, "Maine"),
+            (-63.0, "PEI"),
+        ];
+        for (lon, name) in targets {
+            if let Some(closest) = viewline.iter().min_by(|a, b| {
+                (a.lon - lon)
+                    .abs()
+                    .partial_cmp(&(b.lon - lon).abs())
+                    .unwrap()
+            }) {
+                println!("  {} (lon {:.0}): {:.1}N", name, lon, closest.lat);
+            }
+        }
     }
 
     #[test]

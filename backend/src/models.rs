@@ -121,6 +121,7 @@ pub struct LocationInfo {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", content = "data")]
+#[allow(clippy::large_enum_variant)]
 pub enum WsMessage {
     FullState(FullStateData),
     KpUpdate(Vec<KpIndex>),

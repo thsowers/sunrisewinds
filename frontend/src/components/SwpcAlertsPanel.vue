@@ -1,74 +1,90 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { useAuroraStore } from '@/stores/aurora'
-import type { SwpcAlert } from '@/api/client'
+import { computed, ref } from "vue";
+import { useAuroraStore } from "@/stores/aurora";
+import type { SwpcAlert } from "@/api/client";
 
-const store = useAuroraStore()
+const store = useAuroraStore();
 
-const expandedIds = ref<Set<string>>(new Set())
+const expandedIds = ref<Set<string>>(new Set());
 
 // Sort newest first
 const sortedAlerts = computed(() =>
   [...store.swpcAlerts].sort(
-    (a, b) => new Date(b.issue_datetime).getTime() - new Date(a.issue_datetime).getTime(),
+    (a, b) =>
+      new Date(b.issue_datetime).getTime() -
+      new Date(a.issue_datetime).getTime(),
   ),
-)
+);
 
 function toggleExpand(productId: string) {
   if (expandedIds.value.has(productId)) {
-    expandedIds.value.delete(productId)
+    expandedIds.value.delete(productId);
   } else {
-    expandedIds.value.add(productId)
+    expandedIds.value.add(productId);
   }
   // Trigger reactivity
-  expandedIds.value = new Set(expandedIds.value)
+  expandedIds.value = new Set(expandedIds.value);
 }
 
 function isExpanded(productId: string): boolean {
-  return expandedIds.value.has(productId)
+  return expandedIds.value.has(productId);
 }
 
-function alertCategory(alert: SwpcAlert): 'geomagnetic' | 'solar-radiation' | 'radio' | 'other' {
-  const id = alert.product_id.toUpperCase()
-  const msg = alert.message.toUpperCase()
-  if (id.includes('WAR') || msg.includes('GEOMAGNETIC') || msg.includes('G-SCALE')) {
-    return 'geomagnetic'
+function alertCategory(
+  alert: SwpcAlert,
+): "geomagnetic" | "solar-radiation" | "radio" | "other" {
+  const id = alert.product_id.toUpperCase();
+  const msg = alert.message.toUpperCase();
+  if (
+    id.includes("WAR") ||
+    msg.includes("GEOMAGNETIC") ||
+    msg.includes("G-SCALE")
+  ) {
+    return "geomagnetic";
   }
-  if (msg.includes('SOLAR RADIATION') || msg.includes('S-SCALE') || msg.includes('PROTON')) {
-    return 'solar-radiation'
+  if (
+    msg.includes("SOLAR RADIATION") ||
+    msg.includes("S-SCALE") ||
+    msg.includes("PROTON")
+  ) {
+    return "solar-radiation";
   }
-  if (msg.includes('RADIO') || msg.includes('R-SCALE') || msg.includes('BLACKOUT')) {
-    return 'radio'
+  if (
+    msg.includes("RADIO") ||
+    msg.includes("R-SCALE") ||
+    msg.includes("BLACKOUT")
+  ) {
+    return "radio";
   }
-  return 'other'
+  return "other";
 }
 
 function alertBadgeLabel(alert: SwpcAlert): string {
-  const msg = alert.message
-  const watchMatch = msg.match(/\b(Watch|Warning|Alert|Summary|Forecast)\b/i)
-  return watchMatch?.[1] ?? 'Notice'
+  const msg = alert.message;
+  const watchMatch = msg.match(/\b(Watch|Warning|Alert|Summary|Forecast)\b/i);
+  return watchMatch?.[1] ?? "Notice";
 }
 
 function messageSummary(message: string): string {
   // Extract the first meaningful content line from the SWPC message
   const lines = message
-    .split('\n')
+    .split("\n")
     .map((l) => l.trim())
-    .filter((l) => l && !l.startsWith(':') && !l.startsWith('$'))
-  return lines[0] || message.slice(0, 120)
+    .filter((l) => l && !l.startsWith(":") && !l.startsWith("$"));
+  return lines[0] || message.slice(0, 120);
 }
 
 function formatDateTime(iso: string): string {
   try {
     return new Date(iso).toLocaleString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      timeZoneName: 'short',
-    })
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZoneName: "short",
+    });
   } catch {
-    return iso
+    return iso;
   }
 }
 </script>
@@ -77,7 +93,9 @@ function formatDateTime(iso: string): string {
   <div class="swpc-alerts-panel">
     <div class="panel-header">
       <span class="panel-title">SWPC Alerts</span>
-      <span class="alert-count" v-if="sortedAlerts.length > 0">{{ sortedAlerts.length }}</span>
+      <span class="alert-count" v-if="sortedAlerts.length > 0">{{
+        sortedAlerts.length
+      }}</span>
     </div>
 
     <div v-if="sortedAlerts.length === 0" class="empty-state">
@@ -96,10 +114,14 @@ function formatDateTime(iso: string): string {
             <span class="alert-badge" :class="alertCategory(alert)">
               {{ alertBadgeLabel(alert) }}
             </span>
-            <span class="alert-time">{{ formatDateTime(alert.issue_datetime) }}</span>
+            <span class="alert-time">{{
+              formatDateTime(alert.issue_datetime)
+            }}</span>
           </div>
           <div class="alert-summary">{{ messageSummary(alert.message) }}</div>
-          <span class="expand-toggle">{{ isExpanded(alert.product_id) ? '▲' : '▼' }}</span>
+          <span class="expand-toggle">{{
+            isExpanded(alert.product_id) ? "▲" : "▼"
+          }}</span>
         </div>
 
         <div v-if="isExpanded(alert.product_id)" class="alert-body">
@@ -259,7 +281,7 @@ function formatDateTime(iso: string): string {
   color: #888;
   white-space: pre-wrap;
   word-break: break-word;
-  font-family: 'Courier New', monospace;
+  font-family: "Courier New", monospace;
   line-height: 1.5;
   margin: 0;
 }

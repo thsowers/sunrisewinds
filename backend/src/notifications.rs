@@ -123,10 +123,7 @@ impl Notifier for EmailNotifier {
             .header(ContentType::TEXT_PLAIN)
             .body(body)?;
 
-        let creds = Credentials::new(
-            self.config.smtp_user.clone(),
-            self.config.smtp_pass.clone(),
-        );
+        let creds = Credentials::new(self.config.smtp_user.clone(), self.config.smtp_pass.clone());
 
         let mailer = SmtpTransport::relay(&self.config.smtp_host)?
             .port(self.config.smtp_port)

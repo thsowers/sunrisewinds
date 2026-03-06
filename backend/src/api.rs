@@ -25,7 +25,10 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/api/aurora/kp/forecast", get(get_kp_forecast))
         .route("/api/aurora/kp/history", get(get_kp_history))
         .route("/api/aurora/solar-wind", get(get_solar_wind))
-        .route("/api/aurora/solar-wind/history", get(get_solar_wind_history))
+        .route(
+            "/api/aurora/solar-wind/history",
+            get(get_solar_wind_history),
+        )
         .route("/api/aurora/swpc-alerts", get(get_swpc_alerts))
         .route("/api/aurora/noaa-scales", get(get_noaa_scales))
         .route("/api/status", get(get_status))
@@ -33,9 +36,7 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/api/alerts", get(get_alerts))
 }
 
-async fn get_viewline(
-    State(state): State<Arc<AppState>>,
-) -> Json<serde_json::Value> {
+async fn get_viewline(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
     let viewline = state.cache.viewline.read().unwrap().clone();
     Json(serde_json::to_value(viewline).unwrap())
 }
@@ -60,16 +61,12 @@ async fn get_ovation(
     }
 }
 
-async fn get_kp(
-    State(state): State<Arc<AppState>>,
-) -> Json<serde_json::Value> {
+async fn get_kp(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
     let kp = state.cache.kp_current.read().unwrap().clone();
     Json(serde_json::to_value(kp).unwrap())
 }
 
-async fn get_kp_forecast(
-    State(state): State<Arc<AppState>>,
-) -> Json<serde_json::Value> {
+async fn get_kp_forecast(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
     let forecast = state.cache.kp_forecast.read().unwrap().clone();
     Json(serde_json::to_value(forecast).unwrap())
 }
@@ -85,9 +82,7 @@ async fn get_kp_history(
     }
 }
 
-async fn get_solar_wind(
-    State(state): State<Arc<AppState>>,
-) -> Json<serde_json::Value> {
+async fn get_solar_wind(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
     let sw = state.cache.solar_wind.read().unwrap().clone();
     Json(serde_json::to_value(sw).unwrap())
 }
@@ -103,9 +98,7 @@ async fn get_solar_wind_history(
     }
 }
 
-async fn get_swpc_alerts(
-    State(state): State<Arc<AppState>>,
-) -> Json<serde_json::Value> {
+async fn get_swpc_alerts(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
     let alerts = state.cache.swpc_alerts.read().unwrap().clone();
     Json(serde_json::to_value(alerts).unwrap())
 }
@@ -120,9 +113,7 @@ async fn get_noaa_scales(
     }
 }
 
-async fn get_status(
-    State(state): State<Arc<AppState>>,
-) -> Json<StatusResponse> {
+async fn get_status(State(state): State<Arc<AppState>>) -> Json<StatusResponse> {
     let status = StatusResponse {
         healthy: true,
         last_ovation_poll: *state.cache.last_ovation_poll.read().unwrap(),
@@ -138,9 +129,7 @@ async fn get_status(
     Json(status)
 }
 
-async fn get_config(
-    State(state): State<Arc<AppState>>,
-) -> Json<serde_json::Value> {
+async fn get_config(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
     let config = serde_json::json!({
         "location": {
             "latitude": state.config.location.latitude,

@@ -161,8 +161,7 @@ impl NoaaClient {
             .await
             .context("Failed to fetch NOAA scales")?;
 
-        let data: serde_json::Value =
-            resp.json().await.context("Failed to parse NOAA scales")?;
+        let data: serde_json::Value = resp.json().await.context("Failed to parse NOAA scales")?;
         debug!("NOAA scales fetched");
         Ok(data)
     }

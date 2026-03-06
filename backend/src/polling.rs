@@ -52,9 +52,7 @@ fn spawn_ovation_poll(state: Arc<AppState>, noaa: Arc<NoaaClient>) {
                         let user_lat = state.config.location.latitude;
                         let user_lon = state.config.location.longitude;
 
-                        if let Some(vl_lat) =
-                            viewline::is_aurora_visible(&vl, user_lat, user_lon)
-                        {
+                        if let Some(vl_lat) = viewline::is_aurora_visible(&vl, user_lat, user_lon) {
                             info!(
                                 viewline_lat = vl_lat,
                                 user_lat = user_lat,
@@ -96,14 +94,20 @@ fn spawn_ovation_poll(state: Arc<AppState>, noaa: Arc<NoaaClient>) {
                             warn!("Failed to persist viewline snapshot: {}", e);
                         }
 
-                        state.broadcast_tx.send(WsMessage::ViewlineUpdate(vl.clone())).ok();
+                        state
+                            .broadcast_tx
+                            .send(WsMessage::ViewlineUpdate(vl.clone()))
+                            .ok();
                         *state.cache.viewline.write().unwrap() = vl;
                     }
 
                     let now = Utc::now();
                     *state.cache.last_ovation_poll.write().unwrap() = Some(now);
 
-                    state.broadcast_tx.send(WsMessage::OvationUpdate(ovation.clone())).ok();
+                    state
+                        .broadcast_tx
+                        .send(WsMessage::OvationUpdate(ovation.clone()))
+                        .ok();
                     state
                         .broadcast_tx
                         .send(WsMessage::StatusUpdate(StatusUpdateData {
@@ -144,7 +148,10 @@ fn spawn_kp_poll(state: Arc<AppState>, noaa: Arc<NoaaClient>) {
                         }
                     }
 
-                    state.broadcast_tx.send(WsMessage::KpUpdate(kp_data.clone())).ok();
+                    state
+                        .broadcast_tx
+                        .send(WsMessage::KpUpdate(kp_data.clone()))
+                        .ok();
                     *state.cache.kp_current.write().unwrap() = kp_data;
                     *state.cache.last_kp_poll.write().unwrap() = Some(Utc::now());
                 }
