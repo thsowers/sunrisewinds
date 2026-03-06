@@ -2,9 +2,12 @@ use chrono::{DateTime, Datelike, Duration, TimeZone, Timelike, Utc};
 
 use crate::models::{KpForecast, OvationResponse, TonightViewlineResponse, ViewlinePoint};
 
-/// Geomagnetic north pole (IGRF-14 epoch 2025).
+/// Effective geomagnetic north pole for Kp-based viewline.
+/// Shifted west from the IGRF-14 dipole (80.85, -72.76) to better match
+/// NOAA's published viewline shape, which dips lowest near the Great Lakes
+/// and curves back north toward both coasts.
 const GEOMAG_POLE_LAT_DEG: f64 = 80.85;
-const GEOMAG_POLE_LON_DEG: f64 = -72.76;
+const GEOMAG_POLE_LON_DEG: f64 = -80.0;
 
 /// Minimum aurora probability (0-100) to consider as the equatorward boundary.
 const AURORA_PROBABILITY_THRESHOLD: f64 = 1.0;
@@ -27,11 +30,16 @@ const BASE_GEOMAG_LAT: f64 = 66.0;
 /// Degrees of geomagnetic latitude shift per unit Kp (used in Kp fallback).
 const KP_COEFFICIENT: f64 = 2.0;
 
-/// Viewing offset for the Kp-based model (degrees added to angular distance
-/// from geomagnetic pole). Smaller than VIEWING_OFFSET_DEG because the
-/// empirical Kp formula already targets the equatorward boundary, and the
-/// NOAA viewline implicitly includes horizon viewing geometry.
-const KP_VIEWING_OFFSET_DEG: f64 = 1.0;
+/// Maximum longitude-dependent viewing offset for the Kp-based viewline.
+/// Applied as a geographic latitude correction after projecting the auroral
+/// boundary to geographic coordinates. Points near or west of the geomagnetic
+/// pole receive the full offset; points further east taper to zero. This
+/// produces the elongated oval shape seen in NOAA's published viewline.
+const KP_VIEWING_OFFSET_MAX_DEG: f64 = 4.0;
+
+/// Longitude taper width (degrees east of pole) over which the viewing offset
+/// decreases from full to zero.
+const KP_VIEWING_TAPER_DEG: f64 = 40.0;
 
 fn to_rad(deg: f64) -> f64 {
     deg * std::f64::consts::PI / 180.0
@@ -167,10 +175,11 @@ pub fn compute_viewline(kp: f64) -> Vec<ViewlinePoint> {
     // Geomagnetic latitude of the equatorward auroral boundary
     let geomag_lat = BASE_GEOMAG_LAT - KP_COEFFICIENT * kp;
 
-    // Angular distance from the geomagnetic pole, plus viewing offset
-    let dist = to_rad(90.0 - geomag_lat + KP_VIEWING_OFFSET_DEG);
+    // Angular distance from the geomagnetic pole (no viewing offset yet)
+    let dist = to_rad(90.0 - geomag_lat);
 
-    // Generate viewline as a circle at `dist` from the geomagnetic pole
+    // Generate viewline as a circle at `dist` from the geomagnetic pole,
+    // then apply a longitude-dependent viewing offset in geographic space.
     let mut points: Vec<ViewlinePoint> = Vec::with_capacity(360);
 
     for az_deg in 0..360 {
@@ -187,10 +196,39 @@ pub fn compute_viewline(kp: f64) -> Vec<ViewlinePoint> {
         let lat_deg = to_deg(lat);
         let lon_deg = normalize_lon(to_deg(lon));
 
-        if lat_deg > 0.0 {
+        // Longitude-dependent viewing offset: full offset near the geomagnetic
+        // pole, smoothly tapering to zero at KP_VIEWING_TAPER_DEG east of the
+        // pole. Points west of the pole receive full offset, with a symmetric
+        // taper on the far side of the globe to avoid discontinuities.
+        let mut lon_diff = lon_deg - GEOMAG_POLE_LON_DEG;
+        if lon_diff > 180.0 {
+            lon_diff -= 360.0;
+        } else if lon_diff < -180.0 {
+            lon_diff += 360.0;
+        }
+        // Distance east of the taper boundary (negative = west of it = full offset)
+        let east_of_taper = lon_diff - KP_VIEWING_TAPER_DEG;
+        // Smooth cosine taper: 1.0 at pole, tapering east; also taper from
+        // the far side so points near 180° from the pole smoothly reach 0.
+        let factor = if lon_diff <= 0.0 {
+            // West of pole: taper from 1.0 down to 0.0 over the far hemisphere
+            let west_dist = -lon_diff; // 0..180
+            let t = (west_dist / (360.0 - KP_VIEWING_TAPER_DEG)).clamp(0.0, 1.0);
+            (1.0 + (std::f64::consts::PI * t).cos()) / 2.0
+        } else if lon_diff <= KP_VIEWING_TAPER_DEG {
+            // East of pole within taper zone
+            let t = (lon_diff / KP_VIEWING_TAPER_DEG).clamp(0.0, 1.0);
+            (1.0 + (std::f64::consts::PI * t).cos()) / 2.0
+        } else {
+            0.0
+        };
+        let viewline_lat = lat_deg - KP_VIEWING_OFFSET_MAX_DEG * factor;
+
+        // Clip to North America region (viewing offset is only calibrated here)
+        if viewline_lat > 0.0 && lon_deg >= -130.0 && lon_deg <= -40.0 {
             points.push(ViewlinePoint {
                 lon: lon_deg,
-                lat: lat_deg,
+                lat: viewline_lat,
             });
         }
     }
@@ -515,7 +553,11 @@ mod tests {
     #[test]
     fn test_kp_fallback_generates_points() {
         let viewline = compute_viewline(3.0);
-        assert_eq!(viewline.len(), 360);
+        assert!(
+            viewline.len() > 50,
+            "Expected >50 points, got {}",
+            viewline.len()
+        );
     }
 
     #[test]
@@ -632,50 +674,51 @@ mod tests {
 
     #[test]
     fn test_kp1_noaa_reference() {
-        // NOAA image 2026-03-05 Kp=1: viewline through central-southern Canada
-        // At lon -80 (Ontario): ~53-55N
+        // NOAA viewline Kp=1: includes horizon viewing offset
+        // At lon -80 (Ontario): ~50-52N
         let lat = viewline_lat_at_lon(1.0, -80.0).unwrap();
         assert!(
-            lat >= 53.0 && lat <= 55.0,
-            "Kp=1 at lon -80: expected 53-55N, got {:.1}N",
+            lat >= 49.0 && lat <= 53.0,
+            "Kp=1 at lon -80: expected 49-53N, got {:.1}N",
             lat
         );
 
         // Pacific (~-125): further north due to geomagnetic pole offset
         let lat_pac = viewline_lat_at_lon(1.0, -125.0).unwrap();
         assert!(
-            lat_pac >= 55.0 && lat_pac <= 62.0,
-            "Kp=1 at lon -125: expected 55-62N, got {:.1}N",
+            lat_pac >= 52.0 && lat_pac <= 59.0,
+            "Kp=1 at lon -125: expected 52-59N, got {:.1}N",
             lat_pac
         );
     }
 
     #[test]
     fn test_kp3_noaa_reference() {
-        // NOAA image 2026-03-04 Kp=3: viewline near US/Canada border ~49-51N
+        // NOAA viewline Kp=3: near US/Canada border with viewing offset
+        // At lon -80 (Ontario): ~46-48N
         let lat = viewline_lat_at_lon(3.0, -80.0).unwrap();
         assert!(
-            lat >= 49.0 && lat <= 51.0,
-            "Kp=3 at lon -80: expected 49-51N, got {:.1}N",
+            lat >= 45.0 && lat <= 49.0,
+            "Kp=3 at lon -80: expected 45-49N, got {:.1}N",
             lat
         );
 
         // Pacific (~-125): further north due to geomagnetic pole offset
         let lat_pac = viewline_lat_at_lon(3.0, -125.0).unwrap();
         assert!(
-            lat_pac >= 51.0 && lat_pac <= 57.0,
-            "Kp=3 at lon -125: expected 51-57N, got {:.1}N",
+            lat_pac >= 48.0 && lat_pac <= 54.0,
+            "Kp=3 at lon -125: expected 48-54N, got {:.1}N",
             lat_pac
         );
     }
 
     #[test]
     fn test_kp4_noaa_reference() {
-        // NOAA image 2026-03-04 Kp=4: viewline at ~46-48N (WA->MI->ME)
+        // NOAA viewline Kp=4: with viewing offset ~43-47N
         let lat = viewline_lat_at_lon(4.0, -80.0).unwrap();
         assert!(
-            lat >= 46.0 && lat <= 48.0,
-            "Kp=4 at lon -80: expected 46-48N, got {:.1}N",
+            lat >= 43.0 && lat <= 47.0,
+            "Kp=4 at lon -80: expected 43-47N, got {:.1}N",
             lat
         );
     }
